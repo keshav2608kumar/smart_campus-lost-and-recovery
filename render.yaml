@@ -8,7 +8,7 @@ services:
     plan: free
     envVars:
       - key: DATABASE_URL
-        sync: false
+        value: mysql://3BLJwfELyGU8yqG.root:2O0zfk2gLq827CwW@gateway01.ap-northeast-1.prod.aws.tidbcloud.com:4000/smart_campus
       - key: JWT_SECRET_KEY
         generateValue: true
       - key: JWT_ALGORITHM
