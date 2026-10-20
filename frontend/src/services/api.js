@@ -1,7 +1,13 @@
 import axios from 'axios';
 
+const envBase = import.meta.env.VITE_API_BASE_URL;
+const isPlaceholder = !envBase || envBase.includes('<') || envBase.includes('AAPKA') || envBase === '/api/v1';
+const baseURL = isPlaceholder
+  ? 'https://smart-campus-lost-and-recovery.onrender.com/api/v1'
+  : envBase;
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || '/api/v1',
+  baseURL: baseURL,
 });
 
 // Attach JWT token to every request

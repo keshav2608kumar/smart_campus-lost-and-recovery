@@ -1,77 +1,96 @@
-# Smart Campus Lost & Found System
+# 🎓 Smart Campus Lost & Found System
 
-A comprehensive, clean modular monolith for managing lost and found items on campus, complete with a MySQL 8 backend, a transaction-safe matching engine, and a React frontend.
-
-## 🚀 Technology Stack
-*   **Database**: MySQL 8.x (InnoDB) strictly compliant. No PostgreSQL dependencies.
-*   **Backend**: Python 3.x, FastAPI, SQLAlchemy 2.x, Alembic, Pydantic, Passlib, JWT.
-*   **Frontend**: React 18, Vite, Tailwind CSS, React Router DOM, Axios, Lucide React.
-
-## 🗄️ Database Normalization & Architecture
-The MySQL database is normalized to 3NF. We use foreign keys, unique constraints, and strict enum checks to ensure data integrity. 
-To prevent race conditions when multiple staff members attempt to approve claims simultaneously, the engine utilizes `SELECT ... FOR UPDATE` (row-level locking) during the approval transaction.
+A modern, production-ready full-stack platform for campus-wide lost and found management, intelligent similarity matching, staff verification, custody handovers, and executive audit analytics.
 
 ---
 
-## 🛠️ Windows 11 Setup Guide
+## 🌐 Live Cloud Deployment Links
 
-### 1. Install & Configure MySQL 8.x
-1. Download and install MySQL 8.x Community Server for Windows.
-2. Open MySQL Command Line Client or MySQL Workbench and run:
-   ```sql
-   CREATE DATABASE smart_campus;
-   ```
-3. Load the schema and seed data into your MySQL database:
-   ```bash
-   # From the project root
-   mysql -u root -p smart_campus < database/schema.sql
-   mysql -u root -p smart_campus < database/seed.sql
-   ```
-   *(Note: The seed data includes `alice@campus.edu` and `staff@campus.edu` with the password `password123`)*
+| Component | Provider | Live Link | Status |
+| :--- | :--- | :--- | :--- |
+| **Frontend Application** | **Vercel** | [https://smart-campus-lost-and-recovery.vercel.app](https://smart-campus-lost-and-recovery.vercel.app) | 🟢 **Live** |
+| **Backend API Service** | **Render** | [https://smart-campus-lost-and-recovery.onrender.com](https://smart-campus-lost-and-recovery.onrender.com) | 🟢 **Live** |
+| **API Interactive Swagger Docs** | **FastAPI** | [https://smart-campus-lost-and-recovery.onrender.com/docs](https://smart-campus-lost-and-recovery.onrender.com/docs) | 🟢 **Live** |
+| **Cloud Database (Serverless MySQL)** | **TiDB Cloud** | `gateway01.ap-northeast-1.prod.aws.tidbcloud.com:4000` | 🟢 **Active** |
+
+---
+
+## 👥 Demo Accounts & Credentials
+
+All test accounts use the common password: **`password123`**
+
+### 🎓 Students (Reporting & Claiming Items)
+| Name | Role | Email | Password | Student Reg No |
+| :--- | :--- | :--- | :--- | :--- |
+| **Alice Smith** | Student | `alice@campus.edu` | `password123` | `25BCE2880` |
+| **Bob Jones** | Student | `bob@campus.edu` | `password123` | `25BCE2881` |
+| **Charlie Brown** | Student | `charlie@campus.edu` | `password123` | `25BCE2882` |
+| **David Miller** | Student | `david@campus.edu` | `password123` | `25BCE2883` |
+| **Emma Watson** | Student | `emma@campus.edu` | `password123` | `25BCE2884` |
+
+### 🛡️ Campus Staff & Administrator
+| Name | Role | Email | Password | Permissions |
+| :--- | :--- | :--- | :--- | :--- |
+| **Sarah Staff** | Campus Staff | `staff@campus.edu` | `password123` | Match Verification, Custody Intake, Handover Execution |
+| **Admin User** | Administrator | `admin@campus.edu` | `password123` | System Analytics, Active Users (7), System Logs, Master Auditing |
+
+---
+
+## 🛠️ Technology Stack & Architecture
+
+* **Database (MySQL 8.x / TiDB Cloud)**:
+  * 3NF normalized relational schema with strict Foreign Keys, Indexes, and Check Constraints.
+  * ACID transaction safety with `SELECT ... FOR UPDATE` row-level locking during handover to eliminate race conditions.
+* **Backend API (FastAPI + Python 3.12+)**:
+  * Asynchronous ASGI endpoints with Pydantic v2 schemas and OAuth2 JWT authentication.
+  * Multi-criteria item similarity matching engine with confidence scoring.
+* **Frontend (React 18 + Vite + Tailwind CSS)**:
+  * Responsive role-based portals (Student Portal, Staff Custody Desk, Admin Executive Dashboard).
+  * Lucide Icons, clean modern UI cards, search & filter drawers, and modal workflows.
+
+---
+
+## 🚀 Live Demonstration Flow for Evaluators
+
+1. **Student 1 (Report Lost)**:
+   * Login as **Alice Smith** (`alice@campus.edu` / `password123`).
+   * Click **"Report Lost Item"**, enter item details (e.g. *Dell XPS Laptop* in *Library*), and submit. Status will be `ACTIVE`.
+2. **Student 2 (Report Found)**:
+   * Login as **Bob Jones** (`bob@campus.edu` / `password123`).
+   * Click **"Report Found Item"**, enter matching found item details (e.g. *Found Silver Dell Laptop* in *Library*), and submit.
+   * The backend matching engine automatically computes similarity and suggests a match.
+3. **Staff Member (Verify & Handover)**:
+   * Login as **Sarah Staff** (`staff@campus.edu` / `password123`).
+   * Under **Potential Matches**, review the pair and click **"Verify Match"**.
+   * When the claimant arrives at the campus desk, record notes and click **"Complete Handover"**.
+   * Items automatically transition to `RECOVERED`.
+4. **Administrator (Analytics & Oversight)**:
+   * Login as **Admin User** (`admin@campus.edu` / `password123`).
+   * Review total campus users, recovery rates, active vs resolved cases, and tamper-evident audit logs.
+
+---
+
+## 💻 Local Development Setup
+
+### 1. Database Setup
+```bash
+mysql -u root -p -e "CREATE DATABASE IF NOT EXISTS smart_campus;"
+mysql -u root -p smart_campus < database/complete_production_setup.sql
+```
 
 ### 2. Backend Setup
-1. Open PowerShell and navigate to the `backend` directory:
-   ```powershell
-   cd backend
-   ```
-2. Create and activate a Python virtual environment:
-   ```powershell
-   python -m venv venv
-   .\venv\Scripts\activate
-   ```
-3. Install the required dependencies:
-   ```powershell
-   pip install -r requirements.txt
-   ```
-4. Copy the environment variables template and configure it (ensure your MySQL password matches):
-   ```powershell
-   Copy-Item .env.example .env
-   ```
-5. Start the FastAPI server:
-   ```powershell
-   uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-   ```
-   *The Swagger UI will be available at: http://localhost:8000/docs*
+```bash
+cd backend
+python -m venv venv
+.\venv\Scripts\activate   # On Windows
+pip install -r requirements.txt
+uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
+```
 
 ### 3. Frontend Setup
-1. Open a new PowerShell window and navigate to the `frontend` directory:
-   ```powershell
-   cd frontend
-   ```
-2. Install the React dependencies:
-   ```powershell
-   npm install
-   ```
-3. Start the Vite development server:
-   ```powershell
-   npm run dev
-   ```
-   *The React app will be available at: http://localhost:5173*
-
----
-
-## 🔍 Testing the Workflow
-1. Navigate to `http://localhost:5173/login` in your browser.
-2. Login as a student: `alice@campus.edu` / `password123`.
-3. View the active items on the Dashboard.
-4. Open the FastAPI Swagger UI (`http://localhost:8000/docs`) to trigger the matching engine or test Staff Claim Approvals using the staff account (`staff@campus.edu`).
+```bash
+cd frontend
+npm install
+npm run dev
+```
+Accessible locally at `http://127.0.0.1:5173`.
