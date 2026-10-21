@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from typing import List, Optional
 from app.database import get_db
-from app.models.models import Match, LostItem, User
+from app.models.models import Match, LostItem, User, FoundItem
 from app.schemas.match import MatchResponse
 from app.api.dependencies import get_current_user
 from app.services.matching_engine import generate_matches_for_lost_item
@@ -34,7 +34,10 @@ def get_matches(
     min_score: Optional[float] = None,
     current_user: User = Depends(get_current_user)
 ):
-    query = db.query(Match).join(LostItem)
+    query = db.query(Match).options(
+        joinedload(Match.lost_item),
+        joinedload(Match.found_item)
+    ).join(LostItem)
     
     # Students can only see matches for their own lost items
     if current_user.role == "STUDENT":

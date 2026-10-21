@@ -24,8 +24,10 @@ if settings.MYSQL_SSL or settings.MYSQL_PORT in (4000, 33060) or "tidbcloud" in 
 engine = create_engine(
     SQLALCHEMY_DATABASE_URL,
     connect_args=connect_args,
+    pool_size=10,
+    max_overflow=20,
+    pool_recycle=1800,   # Keep alive for 30 minutes to minimize TLS handshakes
     pool_pre_ping=True,  # Automatically tests connection freshness
-    pool_recycle=300,    # Recycle connections every 5 minutes to prevent cloud timeouts
     echo=False
 )
 

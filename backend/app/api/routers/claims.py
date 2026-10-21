@@ -38,7 +38,7 @@ def submit_claim(
     match.status = "UNDER_REVIEW"
 
     found = db.query(FoundItem).filter(FoundItem.id == match.found_item_id).first()
-    if found and found.status == "AVAILABLE":
+    if found and found.status in ["AVAILABLE", "UNCLAIMED"]:
         found.status = "CLAIMED"
 
     db.flush()
@@ -83,6 +83,18 @@ def get_claims(
         query = query.filter(Claim.status == status)
 
     return query.order_by(Claim.submitted_at.desc()).offset(skip).limit(limit).all()
+
+
+@router.get("/claims/my-claims", response_model=List[ClaimResponse])
+def get_my_claims(
+    db: Session = Depends(get_db),
+    status: Optional[str] = None,
+    current_user: User = Depends(get_current_user),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, le=200)
+):
+    return get_claims(db=db, status=status, current_user=current_user, skip=skip, limit=limit)
+
 
 
 @router.post("/claims/{claim_id}/verify")

@@ -1,15 +1,22 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
 from app.database import engine, Base
-
-# Optionally create all tables directly if not using Alembic initially
-# Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
     title="Smart Campus Lost & Found API",
     description="API for managing lost and found items, matching, claims, and handovers on campus.",
     version="1.0.0"
 )
+
+# Startup event to pre-warm MySQL TLS connection pool
+@app.on_event("startup")
+def startup_warmup():
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+    except Exception as e:
+        print(f"Startup warmup warning: {e}")
 
 # CORS Configuration
 app.add_middleware(

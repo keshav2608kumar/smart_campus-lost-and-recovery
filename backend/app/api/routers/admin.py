@@ -32,43 +32,47 @@ def get_statistics(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_staff_user)
 ):
-    # Total Users & Role Breakdown
-    total_users = db.query(func.count(User.id)).scalar() or 0
-    students_count = db.query(func.count(User.id)).filter(User.role == 'STUDENT').scalar() or 0
-    staff_count = db.query(func.count(User.id)).filter(User.role == 'STAFF').scalar() or 0
-    admins_count = db.query(func.count(User.id)).filter(User.role == 'ADMIN').scalar() or 0
+    # Aggregated Role Breakdown in 1 query
+    user_roles = dict(db.query(User.role, func.count(User.id)).group_by(User.role).all())
+    students_count = user_roles.get('STUDENT', 0)
+    staff_count = user_roles.get('STAFF', 0)
+    admins_count = user_roles.get('ADMIN', 0)
+    total_users = sum(user_roles.values())
     active_users = db.query(func.count(User.id)).filter(User.is_active == True).scalar() or 0
 
-    # Lost Items Breakdown
-    lost_active = db.query(func.count(LostItem.id)).filter(LostItem.status == 'ACTIVE').scalar() or 0
-    lost_matched = db.query(func.count(LostItem.id)).filter(LostItem.status == 'MATCHED').scalar() or 0
-    lost_recovered = db.query(func.count(LostItem.id)).filter(LostItem.status == 'RECOVERED').scalar() or 0
-    total_lost = db.query(func.count(LostItem.id)).scalar() or 0
+    # Aggregated Lost Items in 1 query
+    lost_statuses = dict(db.query(LostItem.status, func.count(LostItem.id)).group_by(LostItem.status).all())
+    lost_active = lost_statuses.get('ACTIVE', 0)
+    lost_matched = lost_statuses.get('MATCHED', 0)
+    lost_recovered = lost_statuses.get('RECOVERED', 0)
+    total_lost = sum(lost_statuses.values())
 
-    # Found Items Breakdown
-    found_available = db.query(func.count(FoundItem.id)).filter(FoundItem.status == 'AVAILABLE').scalar() or 0
-    found_claimed = db.query(func.count(FoundItem.id)).filter(FoundItem.status == 'CLAIMED').scalar() or 0
-    found_returned = db.query(func.count(FoundItem.id)).filter(FoundItem.status == 'RETURNED').scalar() or 0
-    total_found = db.query(func.count(FoundItem.id)).scalar() or 0
+    # Aggregated Found Items in 1 query
+    found_statuses = dict(db.query(FoundItem.status, func.count(FoundItem.id)).group_by(FoundItem.status).all())
+    found_available = found_statuses.get('AVAILABLE', 0) + found_statuses.get('UNCLAIMED', 0)
+    found_claimed = found_statuses.get('CLAIMED', 0)
+    found_returned = found_statuses.get('RETURNED', 0)
+    total_found = sum(found_statuses.values())
 
-    # Claims Breakdown
-    claims_pending = db.query(func.count(Claim.id)).filter(Claim.status == 'PENDING').scalar() or 0
-    claims_approved = db.query(func.count(Claim.id)).filter(Claim.status == 'APPROVED').scalar() or 0
-    claims_rejected = db.query(func.count(Claim.id)).filter(Claim.status == 'REJECTED').scalar() or 0
-    total_claims = db.query(func.count(Claim.id)).scalar() or 0
+    # Aggregated Claims in 1 query
+    claim_statuses = dict(db.query(Claim.status, func.count(Claim.id)).group_by(Claim.status).all())
+    claims_pending = claim_statuses.get('PENDING', 0)
+    claims_approved = claim_statuses.get('APPROVED', 0)
+    claims_rejected = claim_statuses.get('REJECTED', 0)
+    total_claims = sum(claim_statuses.values())
 
     # Handovers
     total_handovers = db.query(func.count(Handover.id)).scalar() or 0
-
-    # Performance
     recovery_rate = (lost_recovered / total_lost * 100) if total_lost > 0 else 0
 
-    # Category Breakdown (Lost + Found counts)
+    # Category Breakdown with single group_by
     categories = db.query(Category).all()
+    cat_lost = dict(db.query(LostItem.category_id, func.count(LostItem.id)).group_by(LostItem.category_id).all())
+    cat_found = dict(db.query(FoundItem.category_id, func.count(FoundItem.id)).group_by(FoundItem.category_id).all())
     category_stats = []
     for cat in categories:
-        l_cnt = db.query(func.count(LostItem.id)).filter(LostItem.category_id == cat.id).scalar() or 0
-        f_cnt = db.query(func.count(FoundItem.id)).filter(FoundItem.category_id == cat.id).scalar() or 0
+        l_cnt = cat_lost.get(cat.id, 0)
+        f_cnt = cat_found.get(cat.id, 0)
         category_stats.append({
             "id": cat.id,
             "name": cat.name,
@@ -77,12 +81,14 @@ def get_statistics(
             "total_count": l_cnt + f_cnt
         })
 
-    # Location Breakdown
+    # Location Breakdown with single group_by
     locations = db.query(Location).all()
+    loc_lost = dict(db.query(LostItem.location_id, func.count(LostItem.id)).group_by(LostItem.location_id).all())
+    loc_found = dict(db.query(FoundItem.location_id, func.count(FoundItem.id)).group_by(FoundItem.location_id).all())
     location_stats = []
     for loc in locations:
-        l_cnt = db.query(func.count(LostItem.id)).filter(LostItem.location_id == loc.id).scalar() or 0
-        f_cnt = db.query(func.count(FoundItem.id)).filter(FoundItem.location_id == loc.id).scalar() or 0
+        l_cnt = loc_lost.get(loc.id, 0)
+        f_cnt = loc_found.get(loc.id, 0)
         location_stats.append({
             "id": loc.id,
             "name": loc.name,
@@ -90,11 +96,14 @@ def get_statistics(
             "total_items": l_cnt + f_cnt
         })
 
-    # Recent 10 audit logs
+    # Recent 10 audit logs with eager loading
     recent_logs = db.query(AuditLog).order_by(AuditLog.created_at.desc()).limit(10).all()
+    user_ids = {log.user_id for log in recent_logs if log.user_id}
+    users_map = {u.id: u for u in db.query(User).filter(User.id.in_(user_ids)).all()} if user_ids else {}
+    
     recent_activity = []
     for log in recent_logs:
-        user = db.query(User).filter(User.id == log.user_id).first() if log.user_id else None
+        user = users_map.get(log.user_id) if log.user_id else None
         recent_activity.append({
             "id": log.id,
             "user_name": user.name if user else "System Automated",
@@ -145,6 +154,7 @@ def get_statistics(
     }
 
 
+
 # --- User Management (Admin Only) ---
 @router.get("/users")
 def get_users(
@@ -171,12 +181,31 @@ def get_users(
     total_count = query.count()
     users = query.order_by(User.created_at.desc()).offset(skip).limit(limit).all()
 
+    user_ids = [u.id for u in users]
+    if user_ids:
+        lost_counts = dict(
+            db.query(LostItem.user_id, func.count(LostItem.id))
+            .filter(LostItem.user_id.in_(user_ids))
+            .group_by(LostItem.user_id)
+            .all()
+        )
+        found_counts = dict(
+            db.query(FoundItem.user_id, func.count(FoundItem.id))
+            .filter(FoundItem.user_id.in_(user_ids))
+            .group_by(FoundItem.user_id)
+            .all()
+        )
+        claim_counts = dict(
+            db.query(Claim.claimant_id, func.count(Claim.id))
+            .filter(Claim.claimant_id.in_(user_ids))
+            .group_by(Claim.claimant_id)
+            .all()
+        )
+    else:
+        lost_counts, found_counts, claim_counts = {}, {}, {}
+
     results = []
     for u in users:
-        lost_c = db.query(func.count(LostItem.id)).filter(LostItem.user_id == u.id).scalar() or 0
-        found_c = db.query(func.count(FoundItem.id)).filter(FoundItem.user_id == u.id).scalar() or 0
-        claim_c = db.query(func.count(Claim.id)).filter(Claim.claimant_id == u.id).scalar() or 0
-
         results.append({
             "id": u.id,
             "name": u.name,
@@ -185,9 +214,9 @@ def get_users(
             "phone": u.phone or "—",
             "is_active": u.is_active,
             "created_at": u.created_at.isoformat() if u.created_at else None,
-            "lost_count": lost_c,
-            "found_count": found_c,
-            "claims_count": claim_c
+            "lost_count": lost_counts.get(u.id, 0),
+            "found_count": found_counts.get(u.id, 0),
+            "claims_count": claim_counts.get(u.id, 0)
         })
 
     return {

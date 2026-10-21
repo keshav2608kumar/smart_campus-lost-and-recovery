@@ -91,10 +91,10 @@ def generate_matches_for_lost_item(db: Session, lost_item: LostItem):
     min_date = lost_item.lost_date - timedelta(days=2)
     max_date = lost_item.lost_date + timedelta(days=30)
     
-    # COARSE FILTER (MySQL): Same category, available, found in reasonable date window.
+    # COARSE FILTER (MySQL): Same category, available or unclaimed, found in reasonable date window.
     candidates = db.query(FoundItem).filter(
         FoundItem.category_id == lost_item.category_id,
-        FoundItem.status == 'AVAILABLE',
+        FoundItem.status.in_(['AVAILABLE', 'UNCLAIMED']),
         FoundItem.found_date >= min_date,
         FoundItem.found_date <= max_date
     ).all()
@@ -124,8 +124,8 @@ def generate_matches_for_lost_item(db: Session, lost_item: LostItem):
         # FINE-GRAINED SCORING (Python)
         score, details = calculate_match_score(lost_item, found, lost_location, found_location)
         
-        # Threshold: Only save matches >= 60 (Possible Match)
-        if score >= 60:
+        # Threshold: Save matches >= 50
+        if score >= 50:
             new_match = Match(
                 lost_item_id=lost_item.id,
                 found_item_id=found.id,
@@ -139,7 +139,7 @@ def generate_matches_for_lost_item(db: Session, lost_item: LostItem):
                 highest_score = score
             
     # Update lost item status if a strong match is found
-    if highest_score >= 75 and lost_item.status == 'ACTIVE':
+    if highest_score >= 70 and lost_item.status == 'ACTIVE':
         lost_item.status = 'MATCHED'
         
     db.commit()
@@ -147,3 +147,61 @@ def generate_matches_for_lost_item(db: Session, lost_item: LostItem):
         db.refresh(m)
         
     return new_matches
+
+
+def generate_matches_for_found_item(db: Session, found_item: FoundItem):
+    """
+    Finds potential lost items when a new found item is reported.
+    """
+    min_date = found_item.found_date - timedelta(days=30)
+    max_date = found_item.found_date + timedelta(days=2)
+    
+    candidates = db.query(LostItem).filter(
+        LostItem.category_id == found_item.category_id,
+        LostItem.status.in_(['ACTIVE', 'MATCHED']),
+        LostItem.lost_date >= min_date,
+        LostItem.lost_date <= max_date
+    ).all()
+    
+    new_matches = []
+    found_location = db.query(Location).filter(Location.id == found_item.location_id).first()
+    
+    candidate_location_ids = {c.location_id for c in candidates}
+    locations = db.query(Location).filter(Location.id.in_(candidate_location_ids)).all()
+    location_map = {loc.id: loc for loc in locations}
+    
+    highest_score = 0
+    
+    for lost in candidates:
+        existing_match = db.query(Match).filter(
+            Match.lost_item_id == lost.id,
+            Match.found_item_id == found_item.id
+        ).first()
+        
+        if existing_match:
+            continue
+            
+        lost_location = location_map.get(lost.location_id)
+        score, details = calculate_match_score(lost, found_item, lost_location, found_location)
+        
+        if score >= 50:
+            new_match = Match(
+                lost_item_id=lost.id,
+                found_item_id=found_item.id,
+                match_score=score,
+                matching_details=details,
+                status="SUGGESTED"
+            )
+            db.add(new_match)
+            new_matches.append(new_match)
+            if score > highest_score:
+                highest_score = score
+            if score >= 70 and lost.status == 'ACTIVE':
+                lost.status = 'MATCHED'
+                
+    db.commit()
+    for m in new_matches:
+        db.refresh(m)
+        
+    return new_matches
+

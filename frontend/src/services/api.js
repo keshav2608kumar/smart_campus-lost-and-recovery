@@ -8,6 +8,7 @@ const baseURL = isPlaceholder
 
 const api = axios.create({
   baseURL: baseURL,
+  timeout: 45000,
 });
 
 // Attach JWT token to every request

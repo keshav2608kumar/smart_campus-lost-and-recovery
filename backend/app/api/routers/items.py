@@ -36,6 +36,14 @@ def report_lost_item(
     db.add(db_item)
     db.commit()
     db.refresh(db_item)
+
+    # Automatically generate matches against turned-in found items
+    try:
+        from app.services.matching_engine import generate_matches_for_lost_item
+        generate_matches_for_lost_item(db, db_item)
+    except Exception as e:
+        print(f"Auto-matching error on lost report: {e}")
+
     return db_item
 
 @router.get("/lost-items", response_model=List[LostItemResponse])
@@ -79,7 +87,14 @@ def report_found_item(
     db.add(db_item)
     db.commit()
     db.refresh(db_item)
-    # Note: In a real system, reporting a found item might asynchronously trigger the matching engine here
+
+    # Automatically generate matches against active lost items
+    try:
+        from app.services.matching_engine import generate_matches_for_found_item
+        generate_matches_for_found_item(db, db_item)
+    except Exception as e:
+        print(f"Auto-matching error on found report: {e}")
+
     return db_item
 
 @router.get("/found-items", response_model=List[FoundItemResponse])

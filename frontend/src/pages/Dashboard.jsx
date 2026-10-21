@@ -8,7 +8,7 @@ const TABS = ['My Lost Items', 'My Found Submissions', 'Report Item', 'Match Res
 const SCORE_BADGE = (score) => {
   if (score >= 90) return { label: 'Very Strong Match (90-100%)', cls: 'bg-emerald-100 text-emerald-800 border border-emerald-300' };
   if (score >= 75) return { label: 'Strong Match (75-89%)', cls: 'bg-amber-100 text-amber-800 border border-amber-300' };
-  return { label: 'Possible Match (60-74%)', cls: 'bg-orange-100 text-orange-700 border border-orange-300' };
+  return { label: 'Possible Match (50-74%)', cls: 'bg-blue-100 text-blue-800 border border-blue-300' };
 };
 
 export default function Dashboard() {
@@ -67,6 +67,7 @@ export default function Dashboard() {
     Promise.all([
       api.get(`/lost-items${userIdParam}`).then(r => setMyLostItems(r.data)).catch(() => []),
       api.get(`/found-items${userIdParam}`).then(r => setMyFoundItems(r.data)).catch(() => []),
+      api.get('/matches').then(r => setMatches(r.data)).catch(() => []),
       api.get('/admin/all-items').then(r => setAllCampusItems(r.data)).catch(() => []),
     ]).finally(() => setLoading(false));
   };

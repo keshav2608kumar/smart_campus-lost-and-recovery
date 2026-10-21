@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import api from '../services/api';
 import { GraduationCap, Shield, UserCheck, ArrowRight, CheckCircle2 } from 'lucide-react';
 
 const DEMO_USERS = {
@@ -96,9 +97,25 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [slowLoading, setSlowLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('students'); // 'students', 'staff', 'admin'
   const { login } = useAuth();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    // Pre-warm backend container immediately on mount so login is fast
+    api.get('/categories').catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    let timer;
+    if (loading) {
+      timer = setTimeout(() => setSlowLoading(true), 2500);
+    } else {
+      setSlowLoading(false);
+    }
+    return () => clearTimeout(timer);
+  }, [loading]);
 
   const handleLogin = async (e) => {
     if (e) e.preventDefault();
@@ -190,6 +207,17 @@ export default function Login() {
               <span>{loading ? 'Authenticating...' : 'Sign In to Dashboard'}</span>
               <ArrowRight size={16} />
             </button>
+
+            {loading && (
+              <div className="mt-3 p-2.5 bg-blue-50 border border-blue-200 rounded-xl text-center text-xs text-blue-700 font-medium animate-pulse flex items-center justify-center gap-2">
+                <div className="w-3.5 h-3.5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                <span>
+                  {slowLoading
+                    ? '⚡ Waking up Render cloud container (free tier wakes after idle period)... Please hold on for a moment!'
+                    : 'Connecting to Cloud Database & Authenticating...'}
+                </span>
+              </div>
+            )}
           </form>
         </div>
 
