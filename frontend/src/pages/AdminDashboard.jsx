@@ -61,7 +61,7 @@ export default function AdminDashboard() {
     try {
       const [statsRes, usersRes, itemsRes, handoversRes, logsRes] = await Promise.all([
         api.get('/admin/stats').catch(e => ({ data: null })),
-        api.get('/admin/users').catch(e => ({ data: { users: [] } })),
+        api.get('/admin/users?limit=200').catch(e => ({ data: { users: [] } })),
         api.get('/admin/all-items').catch(e => ({ data: [] })),
         api.get('/admin/handovers').catch(e => ({ data: [] })),
         api.get('/admin/audit-logs?limit=100').catch(e => ({ data: [] })),
@@ -123,8 +123,8 @@ export default function AdminDashboard() {
         phone: newUserPhone || null
       });
 
-      // Add to current users state
-      setUsersList(prev => [res.data, ...prev]);
+      // Add to current users state (with default activity counts for new user)
+      setUsersList(prev => [{ ...res.data, lost_count: 0, found_count: 0, claims_count: 0, phone: res.data.phone || '—' }, ...prev]);
       setShowAddUserModal(false);
       // Reset form
       setNewUserName('');
