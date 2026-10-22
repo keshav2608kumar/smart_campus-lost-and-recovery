@@ -4,7 +4,8 @@ import { useAuth } from '../context/AuthContext';
 import {
   LogOut, Users, TrendingUp, Search, Shield, Package,
   CheckCircle, XCircle, Clock, AlertCircle, PlusCircle,
-  RefreshCw, Check, ArrowRight, UserPlus, Filter, MapPin, Tag
+  RefreshCw, Check, ArrowRight, UserPlus, Filter, MapPin, Tag,
+  Lock, Unlock, Key, Copy
 } from 'lucide-react';
 
 export default function AdminDashboard() {
@@ -42,6 +43,13 @@ export default function AdminDashboard() {
   const [newUserPhone, setNewUserPhone] = useState('');
   const [addUserSubmitting, setAddUserSubmitting] = useState(false);
   const [addUserError, setAddUserError] = useState('');
+  const [createdUserCredentials, setCreatedUserCredentials] = useState(null);
+
+  // Modal: Reset User Password
+  const [resetPasswordModalUser, setResetPasswordModalUser] = useState(null);
+  const [newPasswordVal, setNewPasswordVal] = useState('');
+  const [resetPasswordSubmitting, setResetPasswordSubmitting] = useState(false);
+  const [copiedId, setCopiedId] = useState(null);
 
   const TABS = [
     { label: 'System Overview', icon: TrendingUp },
@@ -126,13 +134,19 @@ export default function AdminDashboard() {
       // Add to current users state (with default activity counts for new user)
       setUsersList(prev => [{ ...res.data, lost_count: 0, found_count: 0, claims_count: 0, phone: res.data.phone || '—' }, ...prev]);
       setShowAddUserModal(false);
+      setCreatedUserCredentials({
+        name: res.data.name,
+        email: res.data.email,
+        role: res.data.role,
+        password: newUserPassword,
+        phone: res.data.phone || '—'
+      });
       // Reset form
       setNewUserName('');
       setNewUserEmail('');
       setNewUserPassword('');
       setNewUserRole('STUDENT');
       setNewUserPhone('');
-      alert(`User "${res.data.name}" (${res.data.role}) successfully created!`);
       // Refresh stats
       api.get('/admin/stats').then(r => setStats(r.data)).catch(() => {});
     } catch (err) {
@@ -140,6 +154,35 @@ export default function AdminDashboard() {
     } finally {
       setAddUserSubmitting(false);
     }
+  };
+
+  // Reset User Password
+  const handleResetPassword = async (e) => {
+    e.preventDefault();
+    if (!resetPasswordModalUser || !newPasswordVal) return;
+    if (newPasswordVal.length < 6) {
+      alert('Password must be at least 6 characters long.');
+      return;
+    }
+    setResetPasswordSubmitting(true);
+    try {
+      await api.patch(`/admin/users/${resetPasswordModalUser.id}/reset-password`, {
+        new_password: newPasswordVal
+      });
+      alert(`Password for ${resetPasswordModalUser.name} (${resetPasswordModalUser.email}) has been successfully updated!`);
+      setResetPasswordModalUser(null);
+      setNewPasswordVal('');
+    } catch (err) {
+      alert('Failed to reset password: ' + (err.response?.data?.detail || err.message));
+    } finally {
+      setResetPasswordSubmitting(false);
+    }
+  };
+
+  const copyToClipboard = (text, id) => {
+    navigator.clipboard.writeText(text);
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(null), 2000);
   };
 
   // Filtered users
@@ -515,10 +558,10 @@ export default function AdminDashboard() {
                   <div>
                     <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
                       <Users className="text-purple-600" size={22} />
-                      User Accounts Management
+                      User Accounts &amp; Credential Directory
                     </h2>
                     <p className="text-xs text-slate-500 mt-0.5">
-                      Showing {filteredUsers.length} of {usersList.length} registered campus users. Control roles and account access.
+                      Provision student/staff accounts, inspect credential details, manage password resets, and control security lock status.
                     </p>
                   </div>
 
@@ -527,8 +570,75 @@ export default function AdminDashboard() {
                     className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white font-semibold text-xs px-4 py-2.5 rounded-xl shadow transition"
                   >
                     <UserPlus size={16} />
-                    <span>Create New User</span>
+                    <span>Register Student / Staff</span>
                   </button>
+                </div>
+
+                {/* Newly Registered User Credential Banner */}
+                {createdUserCredentials && (
+                  <div className="bg-emerald-50 border border-emerald-300 rounded-2xl p-5 shadow-sm">
+                    <div className="flex justify-between items-start mb-2">
+                      <div className="flex items-center gap-2 text-emerald-800 font-bold text-sm">
+                        <CheckCircle size={18} className="text-emerald-600" />
+                        <span>New User Successfully Registered &amp; Credentials Provisioned!</span>
+                      </div>
+                      <button onClick={() => setCreatedUserCredentials(null)} className="text-slate-400 hover:text-slate-600 text-xs font-semibold">✕ Close</button>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 bg-white p-3.5 rounded-xl border border-emerald-200 text-xs mt-2">
+                      <div>
+                        <p className="text-slate-400 font-medium">Full Name</p>
+                        <p className="font-bold text-slate-800">{createdUserCredentials.name}</p>
+                      </div>
+                      <div>
+                        <p className="text-slate-400 font-medium">Login Email</p>
+                        <p className="font-mono font-bold text-indigo-700">{createdUserCredentials.email}</p>
+                      </div>
+                      <div>
+                        <p className="text-slate-400 font-medium">Initial Password</p>
+                        <p className="font-mono font-bold text-slate-800">{createdUserCredentials.password}</p>
+                      </div>
+                      <div>
+                        <p className="text-slate-400 font-medium">Role &amp; Contact</p>
+                        <p className="font-semibold text-slate-700">{createdUserCredentials.role} • {createdUserCredentials.phone}</p>
+                      </div>
+                    </div>
+                    <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-emerald-800">
+                      <span>The user can now immediately sign in to their portal with these credentials.</span>
+                      <button
+                        onClick={() => copyToClipboard(`Email: ${createdUserCredentials.email}\nPassword: ${createdUserCredentials.password}\nRole: ${createdUserCredentials.role}`, 'new-cred')}
+                        className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-semibold flex items-center gap-1.5 transition text-xs shadow-sm"
+                      >
+                        {copiedId === 'new-cred' ? <Check size={13} /> : <Copy size={13} />}
+                        <span>{copiedId === 'new-cred' ? 'Copied to Clipboard!' : 'Copy Credentials'}</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Account Metrics Counter Row */}
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                  <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm">
+                    <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Total Accounts</p>
+                    <p className="text-2xl font-black text-slate-800">{usersList.length}</p>
+                  </div>
+                  <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm">
+                    <p className="text-[11px] font-semibold text-blue-600 uppercase tracking-wider">Active Students</p>
+                    <p className="text-2xl font-black text-blue-700">{usersList.filter(u => u.role === 'STUDENT' && u.is_active).length}</p>
+                  </div>
+                  <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm">
+                    <p className="text-[11px] font-semibold text-emerald-600 uppercase tracking-wider">Campus Staff</p>
+                    <p className="text-2xl font-black text-emerald-700">{usersList.filter(u => u.role === 'STAFF').length}</p>
+                  </div>
+                  <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm">
+                    <p className="text-[11px] font-semibold text-purple-600 uppercase tracking-wider">Administrators</p>
+                    <p className="text-2xl font-black text-purple-700">{usersList.filter(u => u.role === 'ADMIN').length}</p>
+                  </div>
+                  <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm">
+                    <p className="text-[11px] font-semibold text-rose-600 uppercase tracking-wider">Access Locked</p>
+                    <p className={`text-2xl font-black ${usersList.filter(u => !u.is_active).length > 0 ? 'text-rose-600' : 'text-slate-400'}`}>
+                      {usersList.filter(u => !u.is_active).length}
+                    </p>
+                  </div>
                 </div>
 
                 {/* Filter and Search Bar */}
@@ -563,9 +673,9 @@ export default function AdminDashboard() {
                       value={userStatusFilter}
                       onChange={e => setUserStatusFilter(e.target.value)}
                     >
-                      <option value="ALL">All Statuses (Active & Suspended)</option>
-                      <option value="ACTIVE">Active Accounts Only</option>
-                      <option value="INACTIVE">Suspended / Inactive Only</option>
+                      <option value="ALL">All Access Statuses</option>
+                      <option value="ACTIVE">Access Active (Unlocked)</option>
+                      <option value="INACTIVE">Access Suspended (Locked)</option>
                     </select>
                   </div>
                 </div>
@@ -583,12 +693,12 @@ export default function AdminDashboard() {
                       <table className="min-w-full text-xs text-left divide-y divide-slate-200">
                         <thead className="bg-slate-50 text-slate-600 uppercase tracking-wider font-semibold">
                           <tr>
-                            <th className="px-5 py-3.5">User</th>
-                            <th className="px-5 py-3.5">Role</th>
-                            <th className="px-5 py-3.5">Contact</th>
+                            <th className="px-5 py-3.5">User Identity</th>
+                            <th className="px-5 py-3.5">Credential Details</th>
+                            <th className="px-5 py-3.5">Role &amp; Privilege</th>
                             <th className="px-5 py-3.5">Activity</th>
-                            <th className="px-5 py-3.5">Status</th>
-                            <th className="px-5 py-3.5 text-right">Actions</th>
+                            <th className="px-5 py-3.5">Access Status</th>
+                            <th className="px-5 py-3.5 text-right">Access &amp; Security Controls</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
@@ -599,9 +709,10 @@ export default function AdminDashboard() {
                                                   'bg-blue-100 text-blue-700 border-blue-200';
                             return (
                               <tr key={u.id} className="hover:bg-slate-50/80 transition">
+                                {/* Column 1: Identity */}
                                 <td className="px-5 py-4">
                                   <div className="flex items-center gap-3">
-                                    <div className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-xs uppercase ${
+                                    <div className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-xs uppercase shadow-sm ${
                                       u.role === 'ADMIN' ? 'bg-purple-600 text-white' :
                                       u.role === 'STAFF' ? 'bg-emerald-600 text-white' :
                                                           'bg-blue-600 text-white'
@@ -610,12 +721,29 @@ export default function AdminDashboard() {
                                     </div>
                                     <div>
                                       <p className="font-bold text-slate-800 text-sm">{u.name}</p>
-                                      <p className="text-slate-400 text-xs">{u.email}</p>
-                                      <p className="text-[10px] text-slate-400">ID #{u.id} • Registered {u.created_at ? u.created_at.slice(0, 10) : '—'}</p>
+                                      <p className="text-[10px] text-slate-400">User ID #{u.id} • Registered {u.created_at ? u.created_at.slice(0, 10) : '—'}</p>
                                     </div>
                                   </div>
                                 </td>
 
+                                {/* Column 2: Credential Details */}
+                                <td className="px-5 py-4">
+                                  <div className="space-y-1">
+                                    <div className="flex items-center gap-1.5 font-mono text-[11px] text-slate-700 font-semibold">
+                                      <span>{u.email}</span>
+                                      <button
+                                        onClick={() => copyToClipboard(u.email, `email-${u.id}`)}
+                                        className="text-slate-400 hover:text-indigo-600 transition"
+                                        title="Copy Login Email"
+                                      >
+                                        {copiedId === `email-${u.id}` ? <Check size={12} className="text-emerald-600" /> : <Copy size={12} />}
+                                      </button>
+                                    </div>
+                                    <p className="text-[11px] text-slate-500">Phone: {u.phone || '—'}</p>
+                                  </div>
+                                </td>
+
+                                {/* Column 3: Role & Privilege */}
                                 <td className="px-5 py-4">
                                   <div className="flex items-center gap-2">
                                     <span className={`px-2.5 py-1 rounded-full text-[11px] font-bold border ${roleColor}`}>
@@ -626,6 +754,7 @@ export default function AdminDashboard() {
                                       value={u.role}
                                       onChange={(e) => handleChangeUserRole(u.id, e.target.value)}
                                       className="text-[10px] bg-slate-100 border border-slate-300 rounded px-1.5 py-0.5 text-slate-700 outline-none hover:bg-slate-200 cursor-pointer"
+                                      title="Change user role"
                                     >
                                       <option value="STUDENT">Set Student</option>
                                       <option value="STAFF">Set Staff</option>
@@ -634,41 +763,55 @@ export default function AdminDashboard() {
                                   </div>
                                 </td>
 
-                                <td className="px-5 py-4 text-slate-600">
-                                  <p className="font-medium">{u.phone}</p>
-                                </td>
-
+                                {/* Column 4: Activity */}
                                 <td className="px-5 py-4">
-                                  <div className="text-slate-600 space-y-0.5">
-                                    <p>Lost: <strong className="text-rose-600">{u.lost_count}</strong> items</p>
-                                    <p>Found: <strong className="text-emerald-600">{u.found_count}</strong> items</p>
-                                    <p>Claims: <strong className="text-indigo-600">{u.claims_count}</strong> claims</p>
+                                  <div className="text-slate-600 space-y-0.5 text-[11px]">
+                                    <p>Lost: <strong className="text-rose-600">{u.lost_count}</strong></p>
+                                    <p>Found: <strong className="text-emerald-600">{u.found_count}</strong></p>
+                                    <p>Claims: <strong className="text-indigo-600">{u.claims_count}</strong></p>
                                   </div>
                                 </td>
 
+                                {/* Column 5: Access Status */}
                                 <td className="px-5 py-4">
                                   {u.is_active ? (
-                                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200">
-                                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Active
+                                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 text-[11px]">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Access Active
                                     </span>
                                   ) : (
-                                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full font-semibold text-rose-700 bg-rose-50 border border-rose-200">
-                                      <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span> Suspended
+                                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full font-semibold text-rose-700 bg-rose-50 border border-rose-200 text-[11px]">
+                                      <Lock size={11} className="text-rose-500" /> Access Locked
                                     </span>
                                   )}
                                 </td>
 
+                                {/* Column 6: Administrative Actions */}
                                 <td className="px-5 py-4 text-right">
-                                  <button
-                                    onClick={() => handleToggleUserStatus(u.id, u.is_active)}
-                                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition ${
-                                      u.is_active
-                                        ? 'bg-rose-50 text-rose-600 border-rose-200 hover:bg-rose-100'
-                                        : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
-                                    }`}
-                                  >
-                                    {u.is_active ? 'Suspend Access' : 'Activate User'}
-                                  </button>
+                                  <div className="flex items-center justify-end gap-1.5">
+                                    {/* Reset Password */}
+                                    <button
+                                      onClick={() => { setResetPasswordModalUser(u); setNewPasswordVal(''); }}
+                                      className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 hover:bg-purple-50 text-slate-700 hover:text-purple-700 border border-slate-200 hover:border-purple-200 transition flex items-center gap-1"
+                                      title="Reset user password"
+                                    >
+                                      <Key size={13} />
+                                      <span className="hidden sm:inline">Reset Password</span>
+                                    </button>
+
+                                    {/* Lock / Unlock Access Toggle */}
+                                    <button
+                                      onClick={() => handleToggleUserStatus(u.id, u.is_active)}
+                                      className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition flex items-center gap-1 ${
+                                        u.is_active
+                                          ? 'bg-rose-50 text-rose-600 border-rose-200 hover:bg-rose-100'
+                                          : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                                      }`}
+                                      title={u.is_active ? 'Lock user out of system' : 'Unlock user account'}
+                                    >
+                                      {u.is_active ? <Lock size={13} /> : <Unlock size={13} />}
+                                      <span>{u.is_active ? 'Lock Access' : 'Unlock'}</span>
+                                    </button>
+                                  </div>
                                 </td>
                               </tr>
                             );
@@ -1058,6 +1201,74 @@ export default function AdminDashboard() {
                   className="px-5 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-semibold transition"
                 >
                   {addUserSubmitting ? 'Creating...' : 'Create Account'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+      {/* ============================================================== */}
+      {/* MODAL: RESET USER PASSWORD */}
+      {/* ============================================================== */}
+      {resetPasswordModalUser && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm border border-slate-100">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-base font-bold text-slate-800 flex items-center gap-2">
+                <Key size={18} className="text-purple-600" />
+                <span>Reset User Password</span>
+              </h3>
+              <button
+                onClick={() => { setResetPasswordModalUser(null); setNewPasswordVal(''); }}
+                className="text-slate-400 hover:text-slate-600 text-lg font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 mb-4 text-xs">
+              <p className="text-slate-400 font-medium text-[11px]">Target Account</p>
+              <p className="font-bold text-slate-800 text-sm mt-0.5">{resetPasswordModalUser.name}</p>
+              <p className="text-indigo-600 font-mono text-[11px] font-semibold">{resetPasswordModalUser.email}</p>
+              <div className="flex items-center gap-2 mt-1.5">
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-200 text-slate-700">
+                  {resetPasswordModalUser.role}
+                </span>
+                <span className="text-[10px] text-slate-400">ID #{resetPasswordModalUser.id}</span>
+              </div>
+            </div>
+
+            <form onSubmit={handleResetPassword} className="space-y-3.5 text-xs">
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">New Password *</label>
+                <div className="relative">
+                  <input
+                    required
+                    type="text"
+                    minLength={6}
+                    placeholder="e.g. CampusSecure@2026"
+                    className="w-full border border-slate-200 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-purple-400 font-mono text-xs"
+                    value={newPasswordVal}
+                    onChange={e => setNewPasswordVal(e.target.value)}
+                  />
+                </div>
+                <p className="text-[11px] text-slate-400 mt-1">Minimum 6 characters. The user can log in immediately after saving.</p>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => { setResetPasswordModalUser(null); setNewPasswordVal(''); }}
+                  className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg font-semibold"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={resetPasswordSubmitting || !newPasswordVal}
+                  className="px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-300 text-white rounded-lg font-semibold transition"
+                >
+                  {resetPasswordSubmitting ? 'Updating...' : 'Set Password'}
                 </button>
               </div>
             </form>

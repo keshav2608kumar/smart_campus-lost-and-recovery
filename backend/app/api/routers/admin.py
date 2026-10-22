@@ -25,6 +25,9 @@ class AdminUserStatusUpdate(BaseModel):
 class AdminUserRoleUpdate(BaseModel):
     role: str
 
+class AdminPasswordReset(BaseModel):
+    new_password: str
+
 
 # --- System Statistics (Accessible to both STAFF & ADMIN for Overviews) ---
 @router.get("/stats")
@@ -337,6 +340,34 @@ def change_user_role(
 
     db.commit()
     return {"message": f"User role changed from {old_role} to {target_user.role}", "role": target_user.role}
+
+
+@router.patch("/users/{user_id}/reset-password")
+def reset_user_password(
+    user_id: int,
+    pwd_in: AdminPasswordReset,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_admin_user)
+):
+    target_user = db.query(User).filter(User.id == user_id).first()
+    if not target_user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    if len(pwd_in.new_password) < 6:
+        raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+
+    target_user.password_hash = get_password_hash(pwd_in.new_password)
+
+    db.add(AuditLog(
+        user_id=current_user.id,
+        entity_type="USER",
+        entity_id=target_user.id,
+        action="RESET_PASSWORD_BY_ADMIN",
+        details={"email": target_user.email}
+    ))
+
+    db.commit()
+    return {"message": f"Password for {target_user.email} has been updated successfully", "email": target_user.email}
 
 
 # --- Completed Handovers (Staff & Admin) ---
