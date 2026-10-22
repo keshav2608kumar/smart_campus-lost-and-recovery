@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
-import { PlusCircle, CheckCircle, Zap, LogOut, Search, FileText, ArrowRight, Package, Tag, MapPin, User, AlertCircle } from 'lucide-react';
+import { PlusCircle, CheckCircle, Zap, LogOut, Search, FileText, ArrowRight, Package, Tag, MapPin, User, AlertCircle, RefreshCw } from 'lucide-react';
 
 const TABS = ['My Lost Items', 'My Found Submissions', 'Report Item', 'Match Results & Claims', 'All Campus Items'];
 
@@ -22,6 +22,7 @@ export default function Dashboard() {
   const [matches, setMatches] = useState([]);
   const [selectedLost, setSelectedLost] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [matchLoading, setMatchLoading] = useState(false);
 
   // Report Lost form
@@ -61,21 +62,46 @@ export default function Dashboard() {
     api.get('/locations').then(r => setLocations(r.data)).catch(() => {});
   }, [user]);
 
-  const fetchAll = () => {
-    setLoading(true);
+  // Refresh fresh items whenever switching tabs
+  useEffect(() => {
+    fetchAll();
+  }, [tab]);
+
+  // Background live sync every 12 seconds
+  useEffect(() => {
+    const timer = setInterval(() => {
+      fetchAll(false);
+    }, 12000);
+    return () => clearInterval(timer);
+  }, [user]);
+
+  const fetchAll = async (showLoading = true) => {
+    if (showLoading) setLoading(true);
+    setRefreshing(true);
     const userIdParam = user?.id ? `?user_id=${user.id}` : '';
-    Promise.all([
-      api.get(`/lost-items${userIdParam}`).then(r => setMyLostItems(r.data)).catch(() => []),
-      api.get(`/found-items${userIdParam}`).then(r => setMyFoundItems(r.data)).catch(() => []),
-      api.get('/matches').then(r => setMatches(r.data)).catch(() => []),
-      api.get('/admin/all-items').then(r => setAllCampusItems(r.data)).catch(() => []),
-    ]).finally(() => setLoading(false));
+    try {
+      const [lostRes, foundRes, matchRes, allRes] = await Promise.all([
+        api.get(`/lost-items${userIdParam}`).catch(() => ({ data: [] })),
+        api.get(`/found-items${userIdParam}`).catch(() => ({ data: [] })),
+        api.get('/matches').catch(() => ({ data: [] })),
+        api.get('/admin/all-items').catch(() => ({ data: [] })),
+      ]);
+      if (lostRes.data) setMyLostItems(lostRes.data);
+      if (foundRes.data) setMyFoundItems(foundRes.data);
+      if (matchRes.data) setMatches(matchRes.data);
+      if (allRes.data) setAllCampusItems(allRes.data);
+    } catch (err) {
+      console.error('Fetch error:', err);
+    } finally {
+      if (showLoading) setLoading(false);
+      setRefreshing(false);
+    }
   };
 
   const handleReportLost = async (e) => {
     e.preventDefault();
     try {
-      await api.post('/lost-items', {
+      const res = await api.post('/lost-items', {
         title: lTitle,
         description: lDesc + (lRegNo ? ` [Student Reg: ${lRegNo}]` : ''),
         color: lColor || null,
@@ -85,10 +111,15 @@ export default function Dashboard() {
         lost_date: new Date().toISOString().split('T')[0],
         lost_time: '12:00:00',
       });
-      alert('✅ Lost item reported successfully! You can now check for matches.');
+      // Optimistically insert into state so it shows immediately
+      if (res.data) {
+        setMyLostItems(prev => [res.data, ...prev]);
+        setAllCampusItems(prev => [{ ...res.data, type: 'LOST' }, ...prev]);
+      }
       setLTitle(''); setLDesc(''); setLColor(''); setLBrand(''); setLRegNo('');
-      fetchAll();
       setTab(0);
+      fetchAll(false);
+      alert('✅ Lost item reported successfully! You can now check for matches.');
     } catch (err) {
       alert('Error: ' + (err.response?.data?.detail || err.message));
     }
@@ -97,7 +128,7 @@ export default function Dashboard() {
   const handleReportFound = async (e) => {
     e.preventDefault();
     try {
-      await api.post('/found-items', {
+      const res = await api.post('/found-items', {
         title: fTitle,
         description: fDesc + (fRegNo ? ` [Found by Student Reg: ${fRegNo}]` : ''),
         color: fColor || null,
@@ -107,10 +138,15 @@ export default function Dashboard() {
         found_date: new Date().toISOString().split('T')[0],
         found_time: '12:00:00',
       });
-      alert('✅ Found item submitted! The system will match it against lost reports.');
+      // Optimistically insert into state so it shows immediately
+      if (res.data) {
+        setMyFoundItems(prev => [res.data, ...prev]);
+        setAllCampusItems(prev => [{ ...res.data, type: 'FOUND' }, ...prev]);
+      }
       setFTitle(''); setFDesc(''); setFColor(''); setFBrand(''); setFRegNo('');
-      fetchAll();
       setTab(1);
+      fetchAll(false);
+      alert('✅ Found item submitted! The system will match it against lost reports.');
     } catch (err) {
       alert('Error: ' + (err.response?.data?.detail || err.message));
     }
@@ -142,7 +178,7 @@ export default function Dashboard() {
       alert('✅ Claim submitted successfully! Campus Staff will review your proof.');
       setShowClaimModal(false);
       setProofDetails('');
-      fetchAll();
+      fetchAll(false);
     } catch (err) {
       alert('Error: ' + (err.response?.data?.detail || err.message));
     } finally {
@@ -154,11 +190,13 @@ export default function Dashboard() {
     if (!campusSearch) return true;
     const s = campusSearch.toLowerCase();
     return (
-      item.title.toLowerCase().includes(s) ||
-      item.description.toLowerCase().includes(s) ||
-      item.category.toLowerCase().includes(s) ||
-      item.location.toLowerCase().includes(s) ||
-      item.brand.toLowerCase().includes(s)
+      (item.title || '').toLowerCase().includes(s) ||
+      (item.description || '').toLowerCase().includes(s) ||
+      (item.category || '').toLowerCase().includes(s) ||
+      (item.location || '').toLowerCase().includes(s) ||
+      (item.brand || '').toLowerCase().includes(s) ||
+      (item.color || '').toLowerCase().includes(s) ||
+      (item.reported_by || '').toLowerCase().includes(s)
     );
   });
 
@@ -189,6 +227,15 @@ export default function Dashboard() {
         </div>
 
         <div className="flex items-center gap-2 self-end sm:self-auto">
+          <button
+            onClick={() => fetchAll()}
+            disabled={refreshing}
+            className="flex items-center gap-1.5 text-xs bg-white/10 hover:bg-white/20 text-white px-3 py-1.5 rounded-lg border border-white/20 font-semibold transition"
+            title="Sync latest inventory"
+          >
+            <RefreshCw size={13} className={refreshing ? 'animate-spin' : ''} />
+            <span>Sync</span>
+          </button>
           <span className="text-xs bg-blue-800 text-blue-200 px-3 py-1 rounded-full font-semibold border border-blue-600">
             Student ID #{user?.id}
           </span>
@@ -659,15 +706,26 @@ export default function Dashboard() {
                 </p>
               </div>
 
-              <div className="relative w-full sm:w-64">
-                <Search className="absolute left-3 top-2.5 text-slate-400" size={14} />
-                <input
-                  type="text"
-                  placeholder="Filter campus items..."
-                  className="w-full pl-8 pr-3 py-2 text-xs border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-400"
-                  value={campusSearch}
-                  onChange={e => setCampusSearch(e.target.value)}
-                />
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <div className="relative w-full sm:w-64">
+                  <Search className="absolute left-3 top-2.5 text-slate-400" size={14} />
+                  <input
+                    type="text"
+                    placeholder="Filter campus items..."
+                    className="w-full pl-8 pr-3 py-2 text-xs border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-400"
+                    value={campusSearch}
+                    onChange={e => setCampusSearch(e.target.value)}
+                  />
+                </div>
+                <button
+                  onClick={() => fetchAll()}
+                  disabled={refreshing}
+                  className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs rounded-lg font-semibold border border-slate-200 flex items-center gap-1 transition"
+                  title="Refresh items list"
+                >
+                  <RefreshCw size={13} className={refreshing ? 'animate-spin text-blue-600' : ''} />
+                  <span className="hidden sm:inline">Refresh</span>
+                </button>
               </div>
             </div>
 

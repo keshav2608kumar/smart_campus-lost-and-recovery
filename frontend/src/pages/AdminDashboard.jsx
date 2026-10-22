@@ -63,8 +63,21 @@ export default function AdminDashboard() {
     fetchAllData();
   }, []);
 
-  const fetchAllData = async () => {
-    setLoading(true);
+  // Auto-refresh fresh data when switching tabs
+  useEffect(() => {
+    fetchAllData(false);
+  }, [tab]);
+
+  // Live background sync every 12 seconds
+  useEffect(() => {
+    const timer = setInterval(() => {
+      fetchAllData(false);
+    }, 12000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const fetchAllData = async (showLoading = true) => {
+    if (showLoading) setLoading(true);
     setErrorMessage('');
     try {
       const [statsRes, usersRes, itemsRes, handoversRes, logsRes] = await Promise.all([
@@ -84,7 +97,7 @@ export default function AdminDashboard() {
       console.error('Failed to load admin data:', err);
       setErrorMessage('Could not load some system data. Please check if the server is running.');
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
       setRefreshing(false);
     }
   };
@@ -201,13 +214,16 @@ export default function AdminDashboard() {
   // Filtered items
   const filteredItems = itemsList.filter(item => {
     const matchesType = itemTypeFilter === 'ALL' || item.type === itemTypeFilter;
-    const matchesSearch = !itemSearch ||
-      item.title.toLowerCase().includes(itemSearch.toLowerCase()) ||
-      item.description.toLowerCase().includes(itemSearch.toLowerCase()) ||
-      item.category.toLowerCase().includes(itemSearch.toLowerCase()) ||
-      item.location.toLowerCase().includes(itemSearch.toLowerCase()) ||
-      item.brand.toLowerCase().includes(itemSearch.toLowerCase()) ||
-      item.color.toLowerCase().includes(itemSearch.toLowerCase());
+    if (!itemSearch) return matchesType;
+    const s = itemSearch.toLowerCase();
+    const matchesSearch =
+      (item.title || '').toLowerCase().includes(s) ||
+      (item.description || '').toLowerCase().includes(s) ||
+      (item.category || '').toLowerCase().includes(s) ||
+      (item.location || '').toLowerCase().includes(s) ||
+      (item.brand || '').toLowerCase().includes(s) ||
+      (item.color || '').toLowerCase().includes(s) ||
+      (item.reported_by || '').toLowerCase().includes(s);
     return matchesType && matchesSearch;
   });
 
@@ -841,6 +857,14 @@ export default function AdminDashboard() {
                   </div>
 
                   <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => fetchAllData(false)}
+                      className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100 transition flex items-center gap-1.5"
+                      title="Sync Inventory"
+                    >
+                      <RefreshCw size={13} className={refreshing ? 'animate-spin text-purple-600' : ''} />
+                      <span>Sync</span>
+                    </button>
                     <button
                       onClick={() => setItemTypeFilter('ALL')}
                       className={`px-3 py-1.5 text-xs font-semibold rounded-lg border transition ${

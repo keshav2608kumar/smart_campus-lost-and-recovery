@@ -51,8 +51,21 @@ export default function StaffDashboard() {
     fetchAll();
   }, []);
 
-  const fetchAll = async () => {
-    setLoading(true);
+  // Auto-refresh when switching tabs
+  useEffect(() => {
+    fetchAll(false);
+  }, [tab]);
+
+  // Live sync every 12 seconds in background
+  useEffect(() => {
+    const timer = setInterval(() => {
+      fetchAll(false);
+    }, 12000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const fetchAll = async (showLoading = true) => {
+    if (showLoading) setLoading(true);
     setErrorMessage('');
     try {
       const [statsRes, claimsRes, itemsRes, handoversRes, logsRes] = await Promise.all([
@@ -78,7 +91,7 @@ export default function StaffDashboard() {
       console.error(err);
       setErrorMessage('Failed to fetch operations data. Please ensure the backend server is active.');
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
       setRefreshing(false);
     }
   };
@@ -158,13 +171,16 @@ export default function StaffDashboard() {
   // Filtered inventory items
   const filteredItems = itemsList.filter(item => {
     const matchesType = itemTypeFilter === 'ALL' || item.type === itemTypeFilter;
-    const matchesSearch = !itemSearch ||
-      item.title.toLowerCase().includes(itemSearch.toLowerCase()) ||
-      item.description.toLowerCase().includes(itemSearch.toLowerCase()) ||
-      item.category.toLowerCase().includes(itemSearch.toLowerCase()) ||
-      item.location.toLowerCase().includes(itemSearch.toLowerCase()) ||
-      item.brand.toLowerCase().includes(itemSearch.toLowerCase()) ||
-      item.color.toLowerCase().includes(itemSearch.toLowerCase());
+    if (!itemSearch) return matchesType;
+    const s = itemSearch.toLowerCase();
+    const matchesSearch =
+      (item.title || '').toLowerCase().includes(s) ||
+      (item.description || '').toLowerCase().includes(s) ||
+      (item.category || '').toLowerCase().includes(s) ||
+      (item.location || '').toLowerCase().includes(s) ||
+      (item.brand || '').toLowerCase().includes(s) ||
+      (item.color || '').toLowerCase().includes(s) ||
+      (item.reported_by || '').toLowerCase().includes(s);
     return matchesType && matchesSearch;
   });
 
@@ -680,6 +696,15 @@ export default function StaffDashboard() {
                   </div>
 
                   <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => fetchAll()}
+                      disabled={refreshing}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 transition"
+                      title="Sync live inventory"
+                    >
+                      <RefreshCw size={13} className={refreshing ? 'animate-spin text-emerald-600' : ''} />
+                      <span>Sync</span>
+                    </button>
                     <button
                       onClick={() => setItemTypeFilter('ALL')}
                       className={`px-3 py-1.5 text-xs font-semibold rounded-lg border transition ${
