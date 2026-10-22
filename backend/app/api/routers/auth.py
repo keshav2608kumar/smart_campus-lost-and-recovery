@@ -37,6 +37,13 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
             detail="Incorrect email or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Your account access has been locked by Administrator. Please contact the Campus Security Office.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     
     # Store standard sub (id), name, email and custom role claim in JWT
     access_token = create_access_token(

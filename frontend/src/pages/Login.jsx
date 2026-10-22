@@ -41,7 +41,8 @@ export default function Login() {
       const user = await login(email, password);
       navigate(ROLE_ROUTES[user.role] || '/login');
     } catch (err) {
-      setError('Authentication failed. Invalid campus email or password.');
+      const msg = err.response?.data?.detail || 'Authentication failed. Invalid campus email or password.';
+      setError(msg);
     } finally {
       setLoading(false);
     }
